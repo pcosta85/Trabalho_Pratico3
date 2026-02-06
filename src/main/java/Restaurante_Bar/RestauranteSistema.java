@@ -15,10 +15,10 @@ public class RestauranteSistema {
 
     private final List<Cliente> clientes = new ArrayList<>();
 
-    // 1️⃣ define PRIMEIRO a pasta existente
+    //  define PRIMEIRO a pasta existente
     private static final Path BD_DIR = Paths.get("BD");
 
-    // 2️⃣ depois define os ficheiros
+    //  depois define os ficheiros
     private static final Path CLIENTES_FILE = BD_DIR.resolve("clientes.csv");
     private static final Path PEDIDOS_FILE  = BD_DIR.resolve("pedidos.csv");
 
