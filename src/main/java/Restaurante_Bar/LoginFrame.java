@@ -78,36 +78,45 @@ public class LoginFrame extends JFrame {
 
     private void fazerLogin() {
         String usuario = txtUsuario.getText().trim();
-        String senha = new String(txtSenha.getPassword());
+        String senha = new String(txtSenha.getPassword()).trim();
 
         if (usuario.isEmpty() || senha.isEmpty()) {
-            JOptionPane.showMessageDialog(this,
-                    "Preencha usuário e senha.",
-                    "Aviso",
-                    JOptionPane.WARNING_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Preencha usuário e senha.", "Aviso", JOptionPane.WARNING_MESSAGE);
             return;
         }
 
-        Usuario u = auth.login(usuario, senha);
+        try {
+            Usuario u = auth.login(usuario, senha);
 
-        if (u != null) {
+            if (u != null) {
+                JOptionPane.showMessageDialog(this,
+                        "Login efetuado com sucesso!\nNível: " + u.getNivelAcesso(),
+                        "Sucesso",
+                        JOptionPane.INFORMATION_MESSAGE);
+
+                dispose();
+                new RestauranteMain(u).setVisible(true);
+
+            } else {
+                JOptionPane.showMessageDialog(this,
+                        "Usuário ou senha inválidos.",
+                        "Erro",
+                        JOptionPane.ERROR_MESSAGE);
+            }
+
+        } catch (Exception ex) {
             JOptionPane.showMessageDialog(this,
-                    "Login efetuado com sucesso!\nNível: " + u.getNivelAcesso(),
-                    "Sucesso",
-                    JOptionPane.INFORMATION_MESSAGE);
-
-            dispose();
-            new RestauranteMain(u).setVisible(true);
-
-        } else {
-            JOptionPane.showMessageDialog(this,
-                    "Usuário ou senha inválidos.",
-                    "Erro",
+                    ex.getMessage(),
+                    "Erro de ligação",
                     JOptionPane.ERROR_MESSAGE);
         }
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new LoginFrame().setVisible(true));
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                new LoginFrame().setVisible(true);
+            }
+        });
     }
 }

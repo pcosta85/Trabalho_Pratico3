@@ -1,266 +1,408 @@
 package Restaurante_Bar;
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardOpenOption;
+
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 public class RestauranteSistema {
 
-    private final List<Cliente> clientes = new ArrayList<>();
-
-    //  define PRIMEIRO a pasta existente
-    private static final Path BD_DIR = Paths.get("BD");
-
-    //  depois define os ficheiros
-    private static final Path CLIENTES_FILE = BD_DIR.resolve("clientes.csv");
-    private static final Path PEDIDOS_FILE  = BD_DIR.resolve("pedidos.csv");
-
-    
-
-    // separador mais seguro que vírgula
-    private static final String SEP = ";";
-
-    public RestauranteSistema() {
-        garantirDiretorioBD();
-        carregarClientes();
-        carregarPedidos();
-    }
-
-    private void garantirDiretorioBD() {
-    if (!Files.exists(BD_DIR) || !Files.isDirectory(BD_DIR)) {
-        throw new RuntimeException(
-            "Pasta BD não encontrada em: " + BD_DIR.toAbsolutePath() +
-            "\nCria a pasta 'BD' na raiz do projeto (onde está o pom.xml)."
-        );
-    }
-}
-
-    // =================== CLIENTES ===================
-
     public boolean adicionarCliente(String nome) {
-        if (nome == null) return false; //poderia ser elimando esta parte e manter a parte de baixo
+        if (nome == null || nome.trim().isEmpty()) {
+            return false;
+        }
 
-        String n = nome.trim();
-        if (n.isEmpty()) return false;
+        String sql = "INSERT INTO clientes (nome) VALUES (?)";
 
-        if (procurarCliente(n) != null) return false; // evita duplicados
+        try (Connection conn = Conexao.conectar();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-        Cliente c = new Cliente(n);
-        clientes.add(c);
-        salvarCliente(c);
-        return true;
+            stmt.setString(1, nome.trim());
+            stmt.executeUpdate();
+            return true;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     public Cliente procurarCliente(String nome) {
-        if (nome == null) return null;
-        String n = nome.trim();
-        for (Cliente c : clientes) {
-            if (c.getNome().equalsIgnoreCase(n)) return c;
+        String sql = "SELECT id, nome FROM clientes WHERE TRIM(LOWER(nome)) = TRIM(LOWER(?))";
+
+        try (Connection conn = Conexao.conectar();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setString(1, nome == null ? "" : nome.trim());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                if (rs.next()) {
+                    Cliente cliente = new Cliente(
+                        rs.getInt("id"),
+                        rs.getString("nome")
+                    );
+
+                    cliente.setPedidos(obterPedidosCliente(cliente));
+                    return cliente;
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
         }
+
         return null;
     }
 
+    public boolean registrarPedido(String nomeCliente, Produto produto, int quantidade) {
+        String sqlCliente = "SELECT id FROM clientes WHERE TRIM(LOWER(nome)) = TRIM(LOWER(?))";
+        String sqlProduto = "INSERT INTO produtos (nome, preco) VALUES (?, ?)";
+        String sqlPedido = "INSERT INTO pedidos (cliente_id, produto_id, quantidade) VALUES (?, ?, ?)";
+
+        Connection conn = null;
+
+        try {
+            conn = Conexao.conectar();
+            conn.setAutoCommit(false);
+
+            int clienteId;
+
+            try (PreparedStatement stmtCliente = conn.prepareStatement(sqlCliente)) {
+                stmtCliente.setString(1, nomeCliente == null ? "" : nomeCliente.trim());
+
+                try (ResultSet rsCliente = stmtCliente.executeQuery()) {
+                    if (!rsCliente.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                    clienteId = rsCliente.getInt("id");
+                }
+            }
+
+            int produtoId;
+
+            try (PreparedStatement stmtProduto = conn.prepareStatement(sqlProduto, Statement.RETURN_GENERATED_KEYS)) {
+                stmtProduto.setString(1, produto.getNome().trim());
+                stmtProduto.setDouble(2, produto.getPreco());
+                stmtProduto.executeUpdate();
+
+                try (ResultSet rsProduto = stmtProduto.getGeneratedKeys()) {
+                    if (!rsProduto.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                    produtoId = rsProduto.getInt(1);
+                }
+            }
+
+            try (PreparedStatement stmtPedido = conn.prepareStatement(sqlPedido)) {
+                stmtPedido.setInt(1, clienteId);
+                stmtPedido.setInt(2, produtoId);
+                stmtPedido.setInt(3, quantidade);
+                stmtPedido.executeUpdate();
+            }
+
+            conn.commit();
+            return true;
+
+        } catch (Exception e) {
+            try {
+                if (conn != null) {
+                    conn.rollback();
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+
+            e.printStackTrace();
+            return false;
+
+        } finally {
+            try {
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public List<Pedido> obterPedidosCliente(Cliente cliente) {
+        List<Pedido> lista = new ArrayList<Pedido>();
+
+        String sql = "SELECT p.id AS pedido_id, pr.id AS produto_id, pr.nome, pr.preco, p.quantidade " +
+                     "FROM pedidos p " +
+                     "INNER JOIN produtos pr ON p.produto_id = pr.id " +
+                     "WHERE p.cliente_id = ? " +
+                     "ORDER BY p.id";
+
+        try (Connection conn = Conexao.conectar();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
+
+            stmt.setInt(1, cliente.getId());
+
+            try (ResultSet rs = stmt.executeQuery()) {
+                while (rs.next()) {
+                    Produto prod = new Produto(
+                        rs.getInt("produto_id"),
+                        rs.getString("nome"),
+                        rs.getDouble("preco")
+                    );
+
+                    Pedido ped = new Pedido(
+                        rs.getInt("pedido_id"),
+                        prod,
+                        rs.getInt("quantidade")
+                    );
+
+                    lista.add(ped);
+                }
+            }
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        return lista;
+    }
+
     public boolean alterarNomeCliente(String nomeAtual, String novoNome) {
-        Cliente c = procurarCliente(nomeAtual);
-        if (c == null) return false;
+        if (nomeAtual == null || nomeAtual.trim().isEmpty() ||
+            novoNome == null || novoNome.trim().isEmpty()) {
+            return false;
+        }
 
-        if (novoNome == null || novoNome.trim().isEmpty()) return false; //poderia ser elimando esta parte e manter a parte de baixo
+        String sql = "UPDATE clientes SET nome = ? WHERE TRIM(LOWER(nome)) = TRIM(LOWER(?))";
 
-        // evitar duplicados
-        if (procurarCliente(novoNome) != null) return false;
+        try (Connection conn = Conexao.conectar();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-        c.setNome(novoNome.trim());
+            stmt.setString(1, novoNome.trim());
+            stmt.setString(2, nomeAtual.trim());
 
-        reescreverClientesCSV();
-        reescreverPedidosCSV();
-        return true;
+            return stmt.executeUpdate() > 0;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return false;
+        }
     }
 
     public boolean eliminarCliente(String nome) {
-        Cliente c = procurarCliente(nome);
-        if (c == null) return false;
+        String sql = "DELETE FROM clientes WHERE TRIM(LOWER(nome)) = TRIM(LOWER(?))";
 
-        clientes.remove(c);
+        try (Connection conn = Conexao.conectar();
+             PreparedStatement stmt = conn.prepareStatement(sql)) {
 
-        reescreverClientesCSV();
-        reescreverPedidosCSV();
-        return true;
-    }
+            stmt.setString(1, nome == null ? "" : nome.trim());
+            return stmt.executeUpdate() > 0;
 
-    // =================== PEDIDOS ===================
-
-    public boolean registrarPedido(String nomeCliente, Produto prod, int quant) {
-        if (prod == null || quant <= 0) return false;
-
-        Cliente c = procurarCliente(nomeCliente);
-        if (c == null) return false;
-
-        Pedido p = new Pedido(prod, quant);
-        c.adicionarPedido(p);
-        salvarPedido(c, p);
-        return true;
-    }
-
-    public List<Pedido> obterPedidosCliente(Cliente c) {
-        if (c == null) return Collections.emptyList();
-        return c.getPedidos();
-    }
-
-    public boolean alterarPedido(String nomeCliente, int indicePedido,
-                                 String novoProduto, double novoPreco, int novaQtd) {
-
-        Cliente c = procurarCliente(nomeCliente);
-        if (c == null) return false;
-
-        List<Pedido> pedidos = c.getPedidos();
-        if (indicePedido < 0 || indicePedido >= pedidos.size()) return false;
-
-        if (novoProduto == null || novoProduto.trim().isEmpty()) return false;
-        if (novoPreco < 0) return false;
-        if (novaQtd <= 0) return false;
-
-        Pedido p = pedidos.get(indicePedido);
-        p.setProduto(new Produto(novoProduto.trim(), novoPreco));
-        p.setQuantidade(novaQtd);
-
-        reescreverPedidosCSV();
-        return true;
-    }
-
-    public boolean eliminarPedido(String nomeCliente, int indicePedido) {
-        Cliente c = procurarCliente(nomeCliente);
-        if (c == null) return false;
-
-        List<Pedido> pedidos = c.getPedidos();
-        if (indicePedido < 0 || indicePedido >= pedidos.size()) return false;
-
-        pedidos.remove(indicePedido);
-
-        reescreverPedidosCSV();
-        return true;
-    }
-
-    // =================== PERSISTÊNCIA ===================
-
-    private void salvarCliente(Cliente c) {
-        try (BufferedWriter bw = Files.newBufferedWriter(
-                CLIENTES_FILE, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-            bw.write(c.getNome());
-            bw.newLine();
-        } catch (IOException e) {
+        } catch (Exception e) {
             e.printStackTrace();
+            return false;
         }
     }
 
-    private void salvarPedido(Cliente c, Pedido p) {
-        try (BufferedWriter bw = Files.newBufferedWriter(
-                PEDIDOS_FILE, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-
-            bw.write(c.getNome() + SEP
-                    + p.getProduto().getNome() + SEP
-                    + p.getProduto().getPreco() + SEP
-                    + p.getQuantidade());
-            bw.newLine();
-
-        } catch (IOException e) {
-            e.printStackTrace();
+    public boolean alterarPedido(String nomeCliente, int indice, String novoProduto, double novoPreco, int novaQuantidade) {
+        if (indice < 0) {
+            return false;
         }
-    }
 
-    private void carregarClientes() {
-        if (!Files.exists(CLIENTES_FILE)) return;
+        String sqlCliente = "SELECT id FROM clientes WHERE TRIM(LOWER(nome)) = TRIM(LOWER(?))";
+        String sqlPedidoPorIndice = "SELECT p.id " +
+                                    "FROM pedidos p " +
+                                    "WHERE p.cliente_id = ? " +
+                                    "ORDER BY p.id " +
+                                    "LIMIT ?, 1";
+        String sqlProdutoAtualDoPedido = "SELECT produto_id FROM pedidos WHERE id = ?";
+        String sqlUpdateProduto = "UPDATE produtos SET nome = ?, preco = ? WHERE id = ?";
+        String sqlUpdatePedido = "UPDATE pedidos SET quantidade = ? WHERE id = ?";
 
-        try (BufferedReader br = Files.newBufferedReader(CLIENTES_FILE, StandardCharsets.UTF_8)) {
-            String linha;
-            while ((linha = br.readLine()) != null) {
-                String nome = linha.trim();
-                if (!nome.isEmpty()) {
-                    // evita duplicar na memória se o ficheiro tiver repetidos
-                    if (procurarCliente(nome) == null) {
-                        clientes.add(new Cliente(nome));
+        Connection conn = null;
+
+        try {
+            conn = Conexao.conectar();
+            conn.setAutoCommit(false);
+
+            int clienteId;
+            try (PreparedStatement stmtCliente = conn.prepareStatement(sqlCliente)) {
+                stmtCliente.setString(1, nomeCliente == null ? "" : nomeCliente.trim());
+
+                try (ResultSet rs = stmtCliente.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
                     }
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void carregarPedidos() {
-        if (!Files.exists(PEDIDOS_FILE)) return;
-
-        try (BufferedReader br = Files.newBufferedReader(PEDIDOS_FILE, StandardCharsets.UTF_8)) {
-            String linha;
-            while ((linha = br.readLine()) != null) {
-                String[] partes = linha.split(SEP, -1);
-                if (partes.length == 4) {
-                    String nomeCliente = partes[0].trim();
-                    String nomeProduto = partes[1].trim();
-
-                    double preco;
-                    int qtd;
-
-                    try {
-                        preco = Double.parseDouble(partes[2].trim());
-                        qtd = Integer.parseInt(partes[3].trim());
-                    } catch (NumberFormatException ex) {
-                        continue; // ignora linha inválida
-                    }
-
-                    Cliente c = procurarCliente(nomeCliente);
-                    if (c != null) {
-                        c.adicionarPedido(new Pedido(new Produto(nomeProduto, preco), qtd));
-                    }
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    // =================== REESCREVER ===================
-
-    private void reescreverClientesCSV() {
-        try (BufferedWriter bw = Files.newBufferedWriter(
-                CLIENTES_FILE, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-
-            for (Cliente c : clientes) {
-                bw.write(c.getNome());
-                bw.newLine();
-            }
-
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private void reescreverPedidosCSV() {
-        try (BufferedWriter bw = Files.newBufferedWriter(
-                PEDIDOS_FILE, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
-
-            for (Cliente c : clientes) {
-                for (Pedido p : c.getPedidos()) {
-                    bw.write(c.getNome() + SEP
-                            + p.getProduto().getNome() + SEP
-                            + p.getProduto().getPreco() + SEP
-                            + p.getQuantidade());
-                    bw.newLine();
+                    clienteId = rs.getInt("id");
                 }
             }
 
-        } catch (IOException e) {
+            int pedidoId;
+            try (PreparedStatement stmtPedido = conn.prepareStatement(sqlPedidoPorIndice)) {
+                stmtPedido.setInt(1, clienteId);
+                stmtPedido.setInt(2, indice);
+
+                try (ResultSet rs = stmtPedido.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                    pedidoId = rs.getInt("id");
+                }
+            }
+
+            int produtoId;
+            try (PreparedStatement stmtProdAtual = conn.prepareStatement(sqlProdutoAtualDoPedido)) {
+                stmtProdAtual.setInt(1, pedidoId);
+
+                try (ResultSet rs = stmtProdAtual.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                    produtoId = rs.getInt("produto_id");
+                }
+            }
+
+            try (PreparedStatement stmtUpdateProd = conn.prepareStatement(sqlUpdateProduto)) {
+                stmtUpdateProd.setString(1, novoProduto.trim());
+                stmtUpdateProd.setDouble(2, novoPreco);
+                stmtUpdateProd.setInt(3, produtoId);
+                stmtUpdateProd.executeUpdate();
+            }
+
+            try (PreparedStatement stmtUpdatePed = conn.prepareStatement(sqlUpdatePedido)) {
+                stmtUpdatePed.setInt(1, novaQuantidade);
+                stmtUpdatePed.setInt(2, pedidoId);
+                stmtUpdatePed.executeUpdate();
+            }
+
+            conn.commit();
+            return true;
+
+        } catch (Exception e) {
+            try {
+                if (conn != null) {
+                    conn.rollback();
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+
             e.printStackTrace();
+            return false;
+
+        } finally {
+            try {
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+    }
+
+    public boolean eliminarPedido(String nomeCliente, int indice) {
+        if (indice < 0) {
+            return false;
+        }
+
+        String sqlCliente = "SELECT id FROM clientes WHERE TRIM(LOWER(nome)) = TRIM(LOWER(?))";
+        String sqlPedidoPorIndice = "SELECT p.id " +
+                                    "FROM pedidos p " +
+                                    "WHERE p.cliente_id = ? " +
+                                    "ORDER BY p.id " +
+                                    "LIMIT ?, 1";
+        String sqlProdutoDoPedido = "SELECT produto_id FROM pedidos WHERE id = ?";
+        String sqlDeletePedido = "DELETE FROM pedidos WHERE id = ?";
+        String sqlDeleteProduto = "DELETE FROM produtos WHERE id = ?";
+
+        Connection conn = null;
+
+        try {
+            conn = Conexao.conectar();
+            conn.setAutoCommit(false);
+
+            int clienteId;
+            try (PreparedStatement stmtCliente = conn.prepareStatement(sqlCliente)) {
+                stmtCliente.setString(1, nomeCliente == null ? "" : nomeCliente.trim());
+
+                try (ResultSet rs = stmtCliente.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                    clienteId = rs.getInt("id");
+                }
+            }
+
+            int pedidoId;
+            try (PreparedStatement stmtPedido = conn.prepareStatement(sqlPedidoPorIndice)) {
+                stmtPedido.setInt(1, clienteId);
+                stmtPedido.setInt(2, indice);
+
+                try (ResultSet rs = stmtPedido.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                    pedidoId = rs.getInt("id");
+                }
+            }
+
+            int produtoId;
+            try (PreparedStatement stmtProduto = conn.prepareStatement(sqlProdutoDoPedido)) {
+                stmtProduto.setInt(1, pedidoId);
+
+                try (ResultSet rs = stmtProduto.executeQuery()) {
+                    if (!rs.next()) {
+                        conn.rollback();
+                        return false;
+                    }
+                    produtoId = rs.getInt("produto_id");
+                }
+            }
+
+            try (PreparedStatement stmtDeletePedido = conn.prepareStatement(sqlDeletePedido)) {
+                stmtDeletePedido.setInt(1, pedidoId);
+                stmtDeletePedido.executeUpdate();
+            }
+
+            try (PreparedStatement stmtDeleteProduto = conn.prepareStatement(sqlDeleteProduto)) {
+                stmtDeleteProduto.setInt(1, produtoId);
+                stmtDeleteProduto.executeUpdate();
+            }
+
+            conn.commit();
+            return true;
+
+        } catch (Exception e) {
+            try {
+                if (conn != null) {
+                    conn.rollback();
+                }
+            } catch (Exception ex) {
+                ex.printStackTrace();
+            }
+
+            e.printStackTrace();
+            return false;
+
+        } finally {
+            try {
+                if (conn != null) {
+                    conn.setAutoCommit(true);
+                    conn.close();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
     }
 }

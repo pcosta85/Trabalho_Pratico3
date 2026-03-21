@@ -15,19 +15,13 @@ import com.lowagie.text.pdf.PdfWriter;
 
 public class FaturaRestaurante {
 
-    
     private static final String PASTA_FATURAS = "faturas";
 
     public static void gerar(Cliente cliente, List<Pedido> pedidos) {
-
-        
         File pasta = new File(PASTA_FATURAS);
-            if (!pasta.exists() || !pasta.isDirectory()) {
-                throw new RuntimeException(
-                    "A pasta de faturas não existe: " + pasta.getAbsolutePath() +
-                    "\nCria manualmente a pasta 'faturas' na raiz do projeto."
-                );
-            }
+        if (!pasta.exists()) {
+            pasta.mkdirs();
+        }
 
         String nomeArquivo = "Fatura_" + cliente.getNome().replace(" ", "_") + ".pdf";
         String caminhoFatura = PASTA_FATURAS + File.separator + nomeArquivo;
@@ -40,12 +34,10 @@ public class FaturaRestaurante {
 
             document.open();
 
-            // Fontes
             Font titulo = new Font(Font.HELVETICA, 16, Font.BOLD);
             Font normal = new Font(Font.HELVETICA, 12);
             Font negrito = new Font(Font.HELVETICA, 12, Font.BOLD);
 
-            // Cabeçalho
             Paragraph pTitulo = new Paragraph("RESTAURANTE/BAR CENTRAL", titulo);
             pTitulo.setAlignment(Element.ALIGN_CENTER);
             document.add(pTitulo);
@@ -55,7 +47,6 @@ public class FaturaRestaurante {
             document.add(new Paragraph("--------------------------------------------------", normal));
             document.add(new Paragraph(" "));
 
-            // Tabela
             PdfPTable tabela = new PdfPTable(4);
             tabela.setWidthPercentage(100);
             tabela.setWidths(new float[]{45f, 15f, 10f, 20f});
@@ -78,7 +69,6 @@ public class FaturaRestaurante {
             }
 
             document.add(tabela);
-
             document.add(new Paragraph(" "));
             document.add(new Paragraph("--------------------------------------------------", normal));
             document.add(new Paragraph("TOTAL A PAGAR: " + df.format(totalGeral) + " ECV", negrito));

@@ -10,6 +10,7 @@ import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.util.List;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
@@ -148,17 +149,20 @@ public class RestauranteMain extends JFrame {
         JTextField txtNome = new JTextField(20);
         JButton btn = new JButton("Inserir");
 
-        gc.gridx = 0; gc.gridy = 0;
+        gc.gridx = 0;
+        gc.gridy = 0;
         p.add(lbl, gc);
 
         gc.gridx = 1;
         p.add(txtNome, gc);
 
-        gc.gridx = 1; gc.gridy = 1;
+        gc.gridx = 1;
+        gc.gridy = 1;
         p.add(btn, gc);
 
         btn.addActionListener(e -> {
             String nome = txtNome.getText().trim();
+
             if (nome.isEmpty()) {
                 aviso("Preencha o nome.");
                 return;
@@ -205,7 +209,9 @@ public class RestauranteMain extends JFrame {
             String nome = txtNome.getText().trim();
             String prod = txtProduto.getText().trim();
 
-            if (nome.isEmpty() || prod.isEmpty() || txtPreco.getText().trim().isEmpty() || txtQtd.getText().trim().isEmpty()) {
+            if (nome.isEmpty() || prod.isEmpty() ||
+                txtPreco.getText().trim().isEmpty() ||
+                txtQtd.getText().trim().isEmpty()) {
                 aviso("Preencha todos os campos.");
                 return;
             }
@@ -226,7 +232,7 @@ public class RestauranteMain extends JFrame {
                 }
 
             } catch (NumberFormatException ex) {
-                erro("Preço/Quantidade inválidos.");
+                erro("Preço ou quantidade inválidos.");
             }
         });
 
@@ -243,7 +249,7 @@ public class RestauranteMain extends JFrame {
         topo.add(txtNomeConsulta);
         topo.add(btn);
 
-        String[] cols = {"Índice", "Produto", "Quantidade", "Preço", "Total"};
+        String[] cols = {"Índice", "ID Pedido", "Produto", "Quantidade", "Preço", "Total"};
         modeloPedidos = new DefaultTableModel(cols, 0);
         tabelaPedidos = new JTable(modeloPedidos);
 
@@ -270,14 +276,17 @@ public class RestauranteMain extends JFrame {
             return;
         }
 
+        List<Pedido> pedidos = sistema.obterPedidosCliente(c);
+
         int i = 0;
-        for (Pedido ped : c.getPedidos()) {
+        for (Pedido ped : pedidos) {
             modeloPedidos.addRow(new Object[]{
-                    i,
-                    ped.getProduto().getNome(),
-                    ped.getQuantidade(),
-                    ped.getProduto().getPreco(),
-                    ped.getTotal()
+                i,
+                ped.getId(),
+                ped.getProduto().getNome(),
+                ped.getQuantidade(),
+                ped.getProduto().getPreco(),
+                ped.getTotal()
             });
             i++;
         }
@@ -290,17 +299,20 @@ public class RestauranteMain extends JFrame {
         JTextField txtNome = new JTextField(20);
         JButton btn = new JButton("Gerar Fatura");
 
-        gc.gridx = 0; gc.gridy = 0;
+        gc.gridx = 0;
+        gc.gridy = 0;
         p.add(new JLabel("Nome do Cliente:"), gc);
 
         gc.gridx = 1;
         p.add(txtNome, gc);
 
-        gc.gridx = 1; gc.gridy = 1;
+        gc.gridx = 1;
+        gc.gridy = 1;
         p.add(btn, gc);
 
         btn.addActionListener(e -> {
             String nome = txtNome.getText().trim();
+
             if (nome.isEmpty()) {
                 aviso("Digite o nome.");
                 return;
@@ -312,7 +324,8 @@ public class RestauranteMain extends JFrame {
                 return;
             }
 
-            FaturaRestaurante.gerar(c, sistema.obterPedidosCliente(c));
+            List<Pedido> pedidos = sistema.obterPedidosCliente(c);
+            FaturaRestaurante.gerar(c, pedidos);
             info("Fatura gerada!");
         });
 
@@ -343,8 +356,11 @@ public class RestauranteMain extends JFrame {
             }
 
             boolean ok = sistema.alterarNomeCliente(atual.getText().trim(), novo.getText().trim());
-            if (ok) info("Cliente alterado com sucesso!");
-            else aviso("Erro: cliente não existe ou nome duplicado.");
+            if (ok) {
+                info("Cliente alterado com sucesso!");
+            } else {
+                aviso("Erro: cliente não existe ou nome duplicado.");
+            }
         });
 
         return p;
@@ -376,13 +392,19 @@ public class RestauranteMain extends JFrame {
 
             int conf = JOptionPane.showConfirmDialog(this,
                     "Eliminar o cliente \"" + n + "\"?",
-                    "Confirmar", JOptionPane.YES_NO_OPTION);
+                    "Confirmar",
+                    JOptionPane.YES_NO_OPTION);
 
-            if (conf != JOptionPane.YES_OPTION) return;
+            if (conf != JOptionPane.YES_OPTION) {
+                return;
+            }
 
             boolean ok = sistema.eliminarCliente(n);
-            if (ok) info("Cliente eliminado!");
-            else aviso("Cliente não encontrado.");
+            if (ok) {
+                info("Cliente eliminado!");
+            } else {
+                aviso("Cliente não encontrado.");
+            }
         });
 
         return p;
@@ -431,8 +453,11 @@ public class RestauranteMain extends JFrame {
                 int q = Integer.parseInt(qtd.getText().trim());
 
                 boolean ok = sistema.alterarPedido(n, i, pr, pc, q);
-                if (ok) info("Pedido alterado!");
-                else aviso("Erro ao alterar pedido (cliente/índice inválido).");
+                if (ok) {
+                    info("Pedido alterado!");
+                } else {
+                    aviso("Erro ao alterar pedido.");
+                }
 
             } catch (NumberFormatException ex) {
                 erro("Índice, preço ou quantidade inválidos.");
@@ -470,13 +495,19 @@ public class RestauranteMain extends JFrame {
 
                 int conf = JOptionPane.showConfirmDialog(this,
                         "Eliminar o pedido índice " + i + " do cliente \"" + n + "\"?",
-                        "Confirmar", JOptionPane.YES_NO_OPTION);
+                        "Confirmar",
+                        JOptionPane.YES_NO_OPTION);
 
-                if (conf != JOptionPane.YES_OPTION) return;
+                if (conf != JOptionPane.YES_OPTION) {
+                    return;
+                }
 
                 boolean ok = sistema.eliminarPedido(n, i);
-                if (ok) info("Pedido eliminado!");
-                else aviso("Erro ao eliminar pedido (cliente/índice inválido).");
+                if (ok) {
+                    info("Pedido eliminado!");
+                } else {
+                    aviso("Erro ao eliminar pedido.");
+                }
 
             } catch (NumberFormatException ex) {
                 erro("Índice inválido.");
@@ -506,6 +537,10 @@ public class RestauranteMain extends JFrame {
     }
 
     public static void main(String[] args) {
-        SwingUtilities.invokeLater(() -> new LoginFrame().setVisible(true));
+        SwingUtilities.invokeLater(new Runnable() {
+            public void run() {
+                new LoginFrame().setVisible(true);
+            }
+        });
     }
 }
