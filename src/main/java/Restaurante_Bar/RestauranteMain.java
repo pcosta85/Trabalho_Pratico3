@@ -60,6 +60,7 @@ public class RestauranteMain extends JFrame {
         JButton btnEliminarCliente = criarBotaoMenu("Eliminar Cliente");
         JButton btnAlterarPedido = criarBotaoMenu("Alterar Pedido");
         JButton btnEliminarPedido = criarBotaoMenu("Eliminar Pedido");
+        JButton btnGerirUsuarios = criarBotaoMenu("Gerir Utilizadores");
         JButton btnLogout = criarBotaoMenu("Terminar Sessão");
 
         adicionarBotao(barraLateral, btnInicio);
@@ -68,11 +69,18 @@ public class RestauranteMain extends JFrame {
         adicionarBotao(barraLateral, btnConsultar);
         adicionarBotao(barraLateral, btnGerarFatura);
 
-        if (isAdmin()) {
+        if (podeAlterarOuEliminarCliente()) {
             adicionarBotao(barraLateral, btnAlterarCliente);
             adicionarBotao(barraLateral, btnEliminarCliente);
+        }
+
+        if (podeAlterarOuEliminarPedido()) {
             adicionarBotao(barraLateral, btnAlterarPedido);
             adicionarBotao(barraLateral, btnEliminarPedido);
+        }
+
+        if (podeGerirUtilizadores()) {
+            adicionarBotao(barraLateral, btnGerirUsuarios);
         }
 
         barraLateral.add(Box.createVerticalGlue());
@@ -87,6 +95,7 @@ public class RestauranteMain extends JFrame {
         painelPrincipal.add(criarPaginaEliminarCliente(), "ELIMINAR_CLIENTE");
         painelPrincipal.add(criarPaginaAlterarPedido(), "ALTERAR_PEDIDO");
         painelPrincipal.add(criarPaginaEliminarPedido(), "ELIMINAR_PEDIDO");
+        painelPrincipal.add(criarPaginaGerirUsuarios(), "GERIR_USUARIOS");
 
         btnInicio.addActionListener(e -> mostrar("INICIO"));
         btnInserirCliente.addActionListener(e -> mostrar("INSERIR_CLIENTE"));
@@ -97,6 +106,7 @@ public class RestauranteMain extends JFrame {
         btnEliminarCliente.addActionListener(e -> mostrar("ELIMINAR_CLIENTE"));
         btnAlterarPedido.addActionListener(e -> mostrar("ALTERAR_PEDIDO"));
         btnEliminarPedido.addActionListener(e -> mostrar("ELIMINAR_PEDIDO"));
+        btnGerirUsuarios.addActionListener(e -> mostrar("GERIR_USUARIOS"));
 
         btnLogout.addActionListener(e -> {
             dispose();
@@ -112,6 +122,26 @@ public class RestauranteMain extends JFrame {
 
     private boolean isAdmin() {
         return usuarioLogado != null && "ADMIN".equalsIgnoreCase(usuarioLogado.getNivelAcesso());
+    }
+
+    private boolean isGestor() {
+        return usuarioLogado != null && "GESTOR".equalsIgnoreCase(usuarioLogado.getNivelAcesso());
+    }
+
+    private boolean isAtendente() {
+        return usuarioLogado != null && "ATENDENTE".equalsIgnoreCase(usuarioLogado.getNivelAcesso());
+    }
+
+    private boolean podeGerirUtilizadores() {
+        return isAdmin();
+    }
+
+    private boolean podeAlterarOuEliminarCliente() {
+        return isAdmin() || isGestor();
+    }
+
+    private boolean podeAlterarOuEliminarPedido() {
+        return isAdmin() || isGestor();
     }
 
     private void adicionarBotao(JPanel painel, JButton botao) {
@@ -350,7 +380,7 @@ public class RestauranteMain extends JFrame {
         gc.gridx = 1; gc.gridy = y; p.add(btn, gc);
 
         btn.addActionListener(e -> {
-            if (!isAdmin()) {
+            if (!podeAlterarOuEliminarCliente()) {
                 aviso("Sem permissão para esta operação.");
                 return;
             }
@@ -379,7 +409,7 @@ public class RestauranteMain extends JFrame {
         gc.gridx = 1; gc.gridy = 1; p.add(btn, gc);
 
         btn.addActionListener(e -> {
-            if (!isAdmin()) {
+            if (!podeAlterarOuEliminarCliente()) {
                 aviso("Sem permissão para esta operação.");
                 return;
             }
@@ -440,7 +470,7 @@ public class RestauranteMain extends JFrame {
         gc.gridx = 1; gc.gridy = y; p.add(btn, gc);
 
         btn.addActionListener(e -> {
-            if (!isAdmin()) {
+            if (!podeAlterarOuEliminarPedido()) {
                 aviso("Sem permissão para esta operação.");
                 return;
             }
@@ -484,7 +514,7 @@ public class RestauranteMain extends JFrame {
         gc.gridx = 1; gc.gridy = 2; p.add(btn, gc);
 
         btn.addActionListener(e -> {
-            if (!isAdmin()) {
+            if (!podeAlterarOuEliminarPedido()) {
                 aviso("Sem permissão para esta operação.");
                 return;
             }
@@ -511,6 +541,107 @@ public class RestauranteMain extends JFrame {
 
             } catch (NumberFormatException ex) {
                 erro("Índice inválido.");
+            }
+        });
+
+        return p;
+    }
+
+    private JPanel criarPaginaGerirUsuarios() {
+        JPanel p = new JPanel(new GridBagLayout());
+        GridBagConstraints gc = baseGC();
+
+        JTextField txtId = new JTextField(6);
+        JTextField txtUsername = new JTextField(18);
+        JTextField txtPassword = new JTextField(18);
+        JTextField txtNivel = new JTextField(18);
+
+        JButton btnCriar = new JButton("Criar Utilizador");
+        JButton btnAtualizar = new JButton("Atualizar Utilizador");
+        JButton btnEliminar = new JButton("Eliminar Utilizador");
+
+        int y = 0;
+        gc.gridx = 0; gc.gridy = y; p.add(new JLabel("ID:"), gc);
+        gc.gridx = 1; p.add(txtId, gc); y++;
+
+        gc.gridx = 0; gc.gridy = y; p.add(new JLabel("Username:"), gc);
+        gc.gridx = 1; p.add(txtUsername, gc); y++;
+
+        gc.gridx = 0; gc.gridy = y; p.add(new JLabel("Password:"), gc);
+        gc.gridx = 1; p.add(txtPassword, gc); y++;
+
+        gc.gridx = 0; gc.gridy = y; p.add(new JLabel("Nível (ADMIN/GESTOR/ATENDENTE):"), gc);
+        gc.gridx = 1; p.add(txtNivel, gc); y++;
+
+        gc.gridx = 1; gc.gridy = y; p.add(btnCriar, gc); y++;
+        gc.gridx = 1; gc.gridy = y; p.add(btnAtualizar, gc); y++;
+        gc.gridx = 1; gc.gridy = y; p.add(btnEliminar, gc);
+
+        btnCriar.addActionListener(e -> {
+            if (!podeGerirUtilizadores()) {
+                aviso("Sem permissão para esta operação.");
+                return;
+            }
+
+            boolean ok = sistema.criarUsuario(
+                    txtUsername.getText().trim(),
+                    txtPassword.getText().trim(),
+                    txtNivel.getText().trim()
+            );
+
+            if (ok) {
+                info("Utilizador criado com sucesso!");
+            } else {
+                aviso("Não foi possível criar o utilizador.");
+            }
+        });
+
+        btnAtualizar.addActionListener(e -> {
+            if (!podeGerirUtilizadores()) {
+                aviso("Sem permissão para esta operação.");
+                return;
+            }
+
+            try {
+                int id = Integer.parseInt(txtId.getText().trim());
+
+                boolean ok = sistema.atualizarUsuario(
+                        id,
+                        txtUsername.getText().trim(),
+                        txtPassword.getText().trim(),
+                        txtNivel.getText().trim()
+                );
+
+                if (ok) {
+                    info("Utilizador atualizado com sucesso!");
+                } else {
+                    aviso("Não foi possível atualizar o utilizador.");
+                }
+
+            } catch (NumberFormatException ex) {
+                erro("ID inválido.");
+            }
+        });
+
+        btnEliminar.addActionListener(e -> {
+            if (!podeGerirUtilizadores()) {
+                aviso("Sem permissão para esta operação.");
+                return;
+            }
+
+            try {
+                int id = Integer.parseInt(txtId.getText().trim());
+
+                boolean ok = sistema.eliminarUsuario(id);
+
+                if (ok) {
+                    info("Utilizador eliminado com sucesso!");
+                } else {
+                    aviso("Não foi possível eliminar o utilizador.");
+                }
+
+            } catch (NumberFormatException ex) {
+                erro("ID inválido.");
             }
         });
 
