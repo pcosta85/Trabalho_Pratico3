@@ -554,7 +554,11 @@ public class RestauranteMain extends JFrame {
         JTextField txtId = new JTextField(6);
         JTextField txtUsername = new JTextField(18);
         JTextField txtPassword = new JTextField(18);
-        JTextField txtNivel = new JTextField(18);
+
+        javax.swing.JComboBox<String> cbNivel = new javax.swing.JComboBox<>(
+                new String[]{"ADMIN", "GESTOR", "ATENDENTE"}
+        );
+        cbNivel.setSelectedIndex(0);
 
         JButton btnCriar = new JButton("Criar Utilizador");
         JButton btnAtualizar = new JButton("Atualizar Utilizador");
@@ -570,8 +574,8 @@ public class RestauranteMain extends JFrame {
         gc.gridx = 0; gc.gridy = y; p.add(new JLabel("Password:"), gc);
         gc.gridx = 1; p.add(txtPassword, gc); y++;
 
-        gc.gridx = 0; gc.gridy = y; p.add(new JLabel("Nível (ADMIN/GESTOR/ATENDENTE):"), gc);
-        gc.gridx = 1; p.add(txtNivel, gc); y++;
+        gc.gridx = 0; gc.gridy = y; p.add(new JLabel("Nível de Acesso:"), gc);
+        gc.gridx = 1; p.add(cbNivel, gc); y++;
 
         gc.gridx = 1; gc.gridy = y; p.add(btnCriar, gc); y++;
         gc.gridx = 1; gc.gridy = y; p.add(btnAtualizar, gc); y++;
@@ -583,14 +587,22 @@ public class RestauranteMain extends JFrame {
                 return;
             }
 
-            boolean ok = sistema.criarUsuario(
-                    txtUsername.getText().trim(),
-                    txtPassword.getText().trim(),
-                    txtNivel.getText().trim()
-            );
+            String username = txtUsername.getText().trim();
+            String password = txtPassword.getText().trim();
+            String nivel = cbNivel.getSelectedItem().toString();
+
+            if (username.isEmpty() || password.isEmpty()) {
+                aviso("Preencha username e password.");
+                return;
+            }
+
+            boolean ok = sistema.criarUsuario(username, password, nivel);
 
             if (ok) {
                 info("Utilizador criado com sucesso!");
+                txtUsername.setText("");
+                txtPassword.setText("");
+                cbNivel.setSelectedIndex(0);
             } else {
                 aviso("Não foi possível criar o utilizador.");
             }
@@ -604,13 +616,16 @@ public class RestauranteMain extends JFrame {
 
             try {
                 int id = Integer.parseInt(txtId.getText().trim());
+                String username = txtUsername.getText().trim();
+                String password = txtPassword.getText().trim();
+                String nivel = cbNivel.getSelectedItem().toString();
 
-                boolean ok = sistema.atualizarUsuario(
-                        id,
-                        txtUsername.getText().trim(),
-                        txtPassword.getText().trim(),
-                        txtNivel.getText().trim()
-                );
+                if (username.isEmpty() || password.isEmpty()) {
+                    aviso("Preencha username e password.");
+                    return;
+                }
+
+                boolean ok = sistema.atualizarUsuario(id, username, password, nivel);
 
                 if (ok) {
                     info("Utilizador atualizado com sucesso!");
@@ -636,6 +651,10 @@ public class RestauranteMain extends JFrame {
 
                 if (ok) {
                     info("Utilizador eliminado com sucesso!");
+                    txtId.setText("");
+                    txtUsername.setText("");
+                    txtPassword.setText("");
+                    cbNivel.setSelectedIndex(0);
                 } else {
                     aviso("Não foi possível eliminar o utilizador.");
                 }
